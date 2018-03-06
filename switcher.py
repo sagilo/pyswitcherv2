@@ -5,7 +5,6 @@ import binascii
 import argparse
 import sys
 
-
 g_switcher_ip = "1.1.1.1" # Change IP Address to your switcher IP
 g_phone_id = "xxxx" # (uid) - 4 HEX digits
 g_device_id = "xxxxxx" # (did) - 6 HEX digits 
@@ -41,7 +40,7 @@ def pack(integral, size):
 		assert False, "Unexpected size: %d" % size
 	return struct.pack(fmt, integral)
 
-def validateHeader(header):
+def validate_header(header):
 	length = len(header)
 	assert length >= g_header_size_bytes, "Header must be at least %d bytes, current: %d" % (g_header_size_bytes, length)
 	assert unpack(header[0:1]) == -2, "Expected -2 got %d" % unpack(header[0:1])
@@ -63,7 +62,7 @@ def validateHeader(header):
 	assert unpack(header[38:39]) == -16, "Expected -16 got %d" % unpack(header[38:39])
 	assert unpack(header[39:40]) == -2, "Expected -2 got %d" % unpack(header[39:40])
 
-def updateHeaderConstants(header):
+def update_request_constants(header):
 	header[0:1] = pack(-2, 1)
 	header[1:2] = pack(-16, 1)
 	header[4:5] = pack(2, 1)
@@ -71,8 +70,8 @@ def updateHeaderConstants(header):
 	header[38:39] = pack(-16, 1)
 	header[39:40] = pack(-2, 1)
 
-def updateRequestHeader(header, length, command, session):
-	updateHeaderConstants(header)
+def update_request_header(header, length, command, session):
+	update_request_constants(header)
 	serial = 52
 	dirty = 1
 	timestamp = int(round(time.time()))
@@ -83,42 +82,42 @@ def updateRequestHeader(header, length, command, session):
 	header[14:15] = pack(dirty, 1) # struct.pack('<b', dirty)
 	#print ("\tMAC: %s" % binascii.hexlify(header[18:24]))
 	header[24:28] = pack(timestamp, 4) # struct.pack('<I', int(round(time.time())))
-	validateHeader(header)
+	validate_header(header)
 
-def getCommandFromHeader(header):
+def get_command_from_header(header):
 	return struct.unpack('<H', header[6:8])[0]
 
 ##########################################################################################
 # local sign in 
 ##########################################################################################
 
-def updateLocalSignInBody(data):
+def update_local_sign_in_body(data):
 	data[40:42] = binascii.unhexlify("1c00")
 	data[42:46] = binascii.unhexlify(g_phone_id)
 	data[46:50] = binascii.unhexlify(g_device_pass)
 	data[80:82] = pack(0, 2)
 
-def generateLocalSignInRequest():
+def generate_local_sign_in_request():
 	length = 82
 	command = 161
 	data = bytearray(b'\x00') * (length - 4)
 	session = 0
-	updateRequestHeader(data, length, command, session)
-	assert getCommandFromHeader(data) == command, "This is not a local sign in request, not continuouing!, command: %d" % getCommandFromHeader(data)
-	updateLocalSignInBody(data)
-	data = calcCRC(data)
+	update_request_header(data, length, command, session)
+	assert get_command_from_header(data) == command, "This is not a local sign in request, not continuouing!, command: %d" % get_command_from_header(data)
+	update_local_sign_in_body(data)
+	data = calc_crc(data)
 	
 	print("Generated local sign in request, length: %d packet: \n\t%s" % (len(data), binascii.hexlify(data)))
 	
 	return data
 
-def sendLocalSignIn(socket, logFile = None):
-	request = generateLocalSignInRequest()
+def send_local_sign_in(socket, logFile = None):
+	request = generate_local_sign_in_request()
 	print("Sending local sign in request")
 	if logFile:
 		logFile.write("Sending local sign in request: %s\n" % (binascii.hexlify(request)))
 
-	session, response = sendPacketGetResponse(request, socket, logFile)
+	session, response = send_packet_get_response(request, socket, logFile)
 	print("Got local sign in response")
 	if logFile:
 		logFile.write("Got local sign in response, turned: %s, delay min: %d\n\t%d\n" % (isOn, delayMin, session))
@@ -129,30 +128,30 @@ def sendLocalSignIn(socket, logFile = None):
 # phone state
 ##########################################################################################
 
-def updatePhoneStateBody(data):
+def update_phone_state_body(data):
 	data[40:43] = binascii.unhexlify(g_device_id)
 
-def generatePhoneStateRequest(session):
+def generate_phone_state_request(session):
 	length = 48
 	command = 769
 	data = bytearray(b'\x00') * (length - 4)
-	updateRequestHeader(data, length, command, session)
-	assert getCommandFromHeader(data) == command, "This is not a phone state request, not continuouing!, command: %d" % getCommandFromHeader(data)
+	update_request_header(data, length, command, session)
+	assert get_command_from_header(data) == command, "This is not a phone state request, not continuouing!, command: %d" % get_command_from_header(data)
 
-	updatePhoneStateBody(data)
-	data = calcCRC(data)
+	update_phone_state_body(data)
+	data = calc_crc(data)
 	
 	print("Generated phone state request, length: %d packet: \n\t%s" % (len(data), binascii.hexlify(data)))
 	
 	return data
 
-def sendPhoneState(session, socket, logFile = None):
-	request = generatePhoneStateRequest(session)
+def send_phone_state(session, socket, logFile = None):
+	request = generate_phone_state_request(session)
 	print("Sending phone state request")
 	if logFile:
 		logFile.write("Sending phone state request: %s\n" % (binascii.hexlify(request)))
 
-	session, response = sendPacketGetResponse(request, socket, logFile)
+	session, response = send_packet_get_response(request, socket, logFile)
 	print("Got control response")
 	if logFile:
 		logFile.write("Got phone state response, session: %d" % (session))
@@ -172,7 +171,7 @@ def sendPhoneState(session, socket, logFile = None):
 # control (on/off)
 ##########################################################################################
 
-def updateControlBody(data, isOn, delayMin):
+def update_control_body(data, isOn, delayMin):
 	print("Setting did (device id): %s" % g_device_id)
 	data[40:43] = binascii.unhexlify(g_device_id)
 	print("Setting uid (phone id): %s" % g_phone_id)
@@ -188,27 +187,27 @@ def updateControlBody(data, isOn, delayMin):
 	assert unpack(data[84:85]) == 0, "expected 0, got %d" % unpack(data[84:85])
 	data[85:89] = pack(delayMin * 60, 4) # struct.pack('<i', delayMin * 60)
 
-def generateControlRequest(isOn, delayMin, session):
+def genereate_control_request(isOn, delayMin, session):
 	length = 93
 	command = 513
 	data = bytearray(b'\x00') * (length - 4)
-	updateRequestHeader(data, length, command, session)
-	assert getCommandFromHeader(data) == command, "This is not a control request, not continuouing!, command: %d" % getCommandFromHeader(data)
+	update_request_header(data, length, command, session)
+	assert get_command_from_header(data) == command, "This is not a control request, not continuouing!, command: %d" % get_command_from_header(data)
 
-	updateControlBody(data, isOn, delayMin)
-	data = calcCRC(data)
+	update_control_body(data, isOn, delayMin)
+	data = calc_crc(data)
 	
 	print("Generated control request. length: %d packet: \n\t%s" % (len(data), binascii.hexlify(data)))
 	
 	return data
 
-def sendControl(isOn, delayMin, session, socket, logFile = None):
-	request = generateControlRequest(isOn, delayMin, session)
+def send_control(isOn, delayMin, session, socket, logFile = None):
+	request = genereate_control_request(isOn, delayMin, session)
 	print("Sending control request, isOn: %d, delay: %d, request: \n\t%s" % (isOn, delayMin, binascii.hexlify(request)))
 	if logFile:
 		logFile.write("Sending control request, turning: %s, delay min: %d\n\t%s\n" % (isOn, delayMin, binascii.hexlify(request)))
 
-	session, response = sendPacketGetResponse(request, socket, logFile)
+	session, response = send_packet_get_response(request, socket, logFile)
 	print("Got control response, session: %d" % session)
 	if logFile:
 		logFile.write("Got control response, turned: %s, delay min: %d" % (isOn, delayMin))
@@ -217,65 +216,69 @@ def sendControl(isOn, delayMin, session, socket, logFile = None):
 # crc
 ##########################################################################################
 
-def calcCRC(data, key = "00000000000000000000000000000000"): 
-	data = binascii.hexlify(data)
-	crc = binascii.hexlify(struct.pack('>I', binascii.crc_hqx(binascii.unhexlify(data), 0x1021)))
-	data = data + crc[6:8] + crc[4:6]
-	crc = crc[6:8] + crc[4:6] + binascii.hexlify(key)
-	crc = binascii.hexlify(struct.pack('>I', binascii.crc_hqx(binascii.unhexlify(crc), 0x1021)))
-	data = data + crc[6:8] + crc[4:6]
-	return bytearray(binascii.unhexlify(data))
+def calc_crc(data, key = "00000000000000000000000000000000"): 
+	crc = bytearray(struct.pack('>I', binascii.crc_hqx(data, 4129)))
+	data = data + crc[3:4] + crc[2:3]
+	crc = crc[3:4] + crc[2:3] + bytearray(key)
+	crc = bytearray(struct.pack('>I', binascii.crc_hqx(crc, 4129)))
+	data = data + crc[3:4] + crc[2:3]
+	return bytearray(data)
 
-def calcCRC2(data, isLogin):
-	data = bytearray(binascii.unhexlify("fef052000232a10000000000340001000000000000000000dd879d5a00000000000000000000f0fe1c003b1800003938333200000000000000000000000000000000000000000000000000000000"))
-	crc = calcCrc16OnBufferBytes(data, 4129)
-	# print("calculated crc16: %d (%s)" % (crc, hex(crc)))
+##########################################################################################
+# parsing
+##########################################################################################
 
-	bufferNew = bytearray(b'\x00') * 34
-	bufferNew[0:2] = pack(crc, 2)
-	key = "000000000000000000002c0e3d398700"
-	bufferNew[2:34] = binascii.hexlify(key)
+def parse_pcap_file(file_path):
+	from pcapfile import savefile
 
-	legal_byte = calcCrc16OnBufferBytes(bufferNew, 4129)
-	print("legal byte: %s" % hex(legal_byte))
-	crc32 = bytearray(b'0x0') * 4
-	crc32[0:2] = pack(crc, 2)
-	crc32[2:4] = pack(legal_byte, 2)
+	print("Loading and parsing pcap file:")
+	testcap = open(file_path, 'rb')
+	capfile = savefile.load_savefile(testcap, layers=1, verbose=True)
+	print("\n")
+	for packet in capfile.packets:
+		packet = bytearray(binascii.unhexlify(packet.packet.payload))
+		if (len(packet) <= 40): # tcp header
+			continue
 
-	print ("final: %s" % binascii.hexlify(crc32))
+		packet = packet[40:] # tcp header
 
-	return data + crc
+		command = get_command_from_header(packet)
+		if command != 513:
+			#print("Not control command, continuouing to next packet, command: %d" % command)
+			continue
 
-def calcCrc16OnBufferBytes(bytes, crc):
-	crc_tab = [0, 4129, 8258, 12387, 16516, 20645, 24774, 28903, 33032, 37161, 41290, 45419, 49548, 53677, 57806, 61935, 4657, 528, 12915, 8786, 21173, 17044, 29431, 25302, 37689, 33560, 45947, 41818, 54205, 50076, 62463, 58334, 9314, 13379, 1056, 5121, 25830, 29895, 17572, 21637, 42346, 46411, 34088, 38153, 58862, 62927, 50604, 54669, 13907, 9842, 5649, 1584, 30423, 26358, 22165, 18100, 46939, 42874, 38681, 34616, 63455, 59390, 55197, 51132, 18628, 22757, 26758, 30887, 2112, 6241, 10242, 14371, 51660, 55789, 59790, 63919, 35144, 39273, 43274, 47403, 23285, 19156, 31415, 27286, 6769, 2640, 14899, 10770, 56317, 52188, 64447, 60318, 39801, 35672, 47931, 43802, 27814, 31879, 19684, 23749, 11298, 15363, 3168, 7233, 60846, 64911, 52716, 56781, 44330, 48395, 36200, 40265, 32407, 28342, 24277, 20212, 15891, 11826, 7761, 3696, 65439, 61374, 57309, 53244, 48923, 44858, 40793, 36728, 37256, 33193, 45514, 41451, 53516, 49453, 61774, 57711, 4224, 161, 12482, 8419, 20484, 16421, 28742, 24679, 33721, 37784, 41979, 46042, 49981, 54044, 58239, 62302, 689, 4752, 8947, 13010, 16949, 21012, 25207, 29270, 46570, 42443, 38312, 34185, 62830, 58703, 54572, 50445, 13538, 9411, 5280, 1153, 29798, 25671, 21540, 17413, 42971, 47098, 34713, 38840, 59231, 63358, 50973, 55100, 9939, 14066, 1681, 5808, 26199, 30326, 17941, 22068, 55628, 51565, 63758, 59695, 39368, 35305, 47498, 43435, 22596, 18533, 30726, 26663, 6336, 2273, 14466, 10403, 52093, 56156, 60223, 64286, 35833, 39896, 43963, 48026, 19061, 23124, 27191, 31254, 2801, 6864, 10931, 14994, 64814, 60687, 56684, 52557, 48554, 44427, 40424, 36297, 31782, 27655, 23652, 19525, 15522, 11395, 7392, 3265, 61215, 65342, 53085, 57212, 44955, 49082, 36825, 40952, 28183, 32310, 20053, 24180, 11923, 16050, 3793, 7920];
-	for byte in bytes:
-		crc = 0xFFFF & ((crc << 8) ^ crc_tab[((crc >> 8) ^ byte) & 255])
+		device_id = binascii.hexlify(packet[40:43])
+		phone_id = binascii.hexlify(packet[44:46])
+		device_pass = binascii.hexlify(packet[48:52])
 
-	return crc
+		return device_id, phone_id, device_pass
+
+	print("Didn't find ids in pcap file")
+	sys.exit()
 
 ##########################################################################################
 # socket helpers
 ##########################################################################################
 
-def getDataFromResponseHeader(header):
+def get_data_from_response_header(header):
 	length = unpack(header[2:4])
 	session = unpack(header[8:12])
 	return session, (length - g_header_size_bytes)
 
-def recvResponse(socket):
+def recv_response(socket):
 	responseHeader = bytearray(socket.recv(g_header_size_bytes))
 	assert len(responseHeader) >= g_header_size_bytes, "Respone header can't be smaller than %d bytes, got %d bytes, exiting" % (g_header_size_bytes, len(responseHeader))
-	respSession, lengthLeft = getDataFromResponseHeader(responseHeader)
+	respSession, lengthLeft = get_data_from_response_header(responseHeader)
 	responseBody = socket.recv(lengthLeft)
 	return respSession, bytearray(responseHeader) + bytearray(responseBody)
 
-def sendPacketGetResponse(request, socket, logFile = None):
+def send_packet_get_response(request, socket, logFile = None):
 	socket.send(request)
-	session, response = recvResponse(socket)
+	session, response = recv_response(socket)
 	assert session != 0, "Got session 0 in response"
 	return session, response
 
-def openSocket():
+def open_socket():
 	print ("Openning socket")
 	clientsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	clientsocket.connect((g_switcher_ip, g_port))
@@ -283,32 +286,47 @@ def openSocket():
 
 	return clientsocket
 
-def getState():
-	socket = openSocket()
-	session = sendLocalSignIn(socket)
-	isOn = sendPhoneState(session, socket)
+def get_state():
+	socket = open_socket()
+	session = send_local_sign_in(socket)
+	isOn = send_phone_state(session, socket)
 	return 1 if isOn else 0
 
 def control(on, timeMin):
-	socket = openSocket()
-	session = sendLocalSignIn(socket)
-	isOn = sendPhoneState(session, socket)
+	socket = open_socket()
+	session = send_local_sign_in(socket)
+	isOn = send_phone_state(session, socket)
 	onSign = 1 if on else 0
-	sendControl(onSign , timeMin, session, socket)
+	send_control(onSign , timeMin, session, socket)
 
-def parseArgs():
+def parse(file_path):
+	device_id, phone_id, device_pass = parse_pcap_file(file_path)
+	print("Device ID (did): %s" % device_id)
+	print("Phone ID (uid): %s" % phone_id)
+	print("Device pass: %s" % device_pass)
+
+def parse_args():
 	parser = argparse.ArgumentParser(description='Help me')
-	modeChoices = ["on", "off", "get_state"]
+	modeChoices = ["on", "off", "get_state", "parse_pcap_file"]
 	parser.add_argument('-m','--mode', dest='mode', choices=modeChoices, required=True)
 	parser.add_argument('-t','--time', dest='timeMin', default=0, type=int, required=False)
+	parser.add_argument('-f','--file_path', dest='file', help="Pcap file to parse (requires pypcapfile package)", required=False)
 
-	return vars(parser.parse_args())
+	args = vars(parser.parse_args())
+	mode = args['mode']
 
-args = parseArgs()
+	if mode == 'parse_pcap_file':
+		assert 'file' in args, "No file given for parsing"
+
+	return args
+
+args = parse_args()
 mode = args['mode']
 if mode == 'get_state':
-	rc = getState()
+	rc = get_state()
 	sys.exit(rc)
+elif mode == 'parse_pcap_file':
+	parse(args['file'])
 elif mode == 'on' or mode == 'off':
 	control(mode == 'on', args['timeMin'])
 else:
