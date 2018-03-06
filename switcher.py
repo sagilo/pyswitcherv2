@@ -4,16 +4,13 @@ import time
 import binascii
 import argparse
 import sys
+import json
+import os.path
 
-g_switcher_ip = "1.1.1.1" # Change IP Address to your switcher IP
-g_phone_id = "xxxx" # (uid) - 4 HEX digits
-g_device_id = "xxxxxx" # (did) - 6 HEX digits 
-g_device_pass = "yyyyyyyy" # 8 DEC digits
-
-# don't touch from this point below
-
+g_credentials_filename = "credentials.json"
 g_port = 9957
 g_header_size_bytes = 40
+g_debug = False
 
 def unpack(bytes):
 	size = len(bytes)
@@ -106,21 +103,23 @@ def generate_local_sign_in_request():
 	assert get_command_from_header(data) == command, "This is not a local sign in request, not continuouing!, command: %d" % get_command_from_header(data)
 	update_local_sign_in_body(data)
 	data = calc_crc(data)
-	
-	print("Generated local sign in request, length: %d packet: \n\t%s" % (len(data), binascii.hexlify(data)))
-	
+		
 	return data
 
-def send_local_sign_in(socket, logFile = None):
+def send_local_sign_in(socket):
 	request = generate_local_sign_in_request()
-	print("Sending local sign in request")
-	if logFile:
-		logFile.write("Sending local sign in request: %s\n" % (binascii.hexlify(request)))
+	
+	if g_debug:
+		print("Sending local sign in request: \n\t%s" % binascii.hexlify(request))
+	else:
+		print("Sending local sign in request")
 
-	session, response = send_packet_get_response(request, socket, logFile)
-	print("Got local sign in response")
-	if logFile:
-		logFile.write("Got local sign in response, turned: %s, delay min: %d\n\t%d\n" % (isOn, delayMin, session))
+	session, response = send_packet_get_response(request, socket)
+
+	if g_debug:
+		print("Got local sign in response, session: %d, response: \n\t%s\n" % (session, binascii.hexlify(response)))
+	else:
+		print("Got local sign in response")
 
 	return session
 
@@ -140,77 +139,74 @@ def generate_phone_state_request(session):
 
 	update_phone_state_body(data)
 	data = calc_crc(data)
-	
-	print("Generated phone state request, length: %d packet: \n\t%s" % (len(data), binascii.hexlify(data)))
-	
+		
 	return data
 
-def send_phone_state(session, socket, logFile = None):
+def send_phone_state(session, socket):
 	request = generate_phone_state_request(session)
-	print("Sending phone state request")
-	if logFile:
-		logFile.write("Sending phone state request: %s\n" % (binascii.hexlify(request)))
 
-	session, response = send_packet_get_response(request, socket, logFile)
-	print("Got control response")
-	if logFile:
-		logFile.write("Got phone state response, session: %d" % (session))
+	if g_debug:
+		print("Sending phone state request: \n\t%s" % binascii.hexlify(request))
+	else:
+		print("Sending phone state request")
 
-	print("response: %s" % binascii.hexlify(response))
-	print("Device name: %s" % response[40:64])
-	isOn = unpack(response[75:77])
-	print("Is on? %d" % isOn)
-	untilCloseSeconds = unpack(response[89:93])
-	print("Seconds until close: %d seconds (%d minutes)" % (untilCloseSeconds, untilCloseSeconds/ 60))
-	timeOpenSeconds = unpack(response[93:97])
-	print("Time open seconds: %d seconds (%d minutes)" % (timeOpenSeconds, timeOpenSeconds / 60))
+	session, response = send_packet_get_response(request, socket)
 
-	return isOn == 1
+	is_on = unpack(response[75:77])
+	minutes_to_off = unpack(response[89:93]) / 60
+	minutes_on = unpack(response[93:97]) / 60
+
+	if g_debug:
+		#print("Device name: %s" % response[40:64])
+		print("Got phone state response, session: %d, on: %d, minutes to off: %d, minutes on: %d, response: \n\t%s\n" % (session, is_on, minutes_to_off, minutes_on, binascii.hexlify(response)))
+	else:
+		print("Got control response")
+
+	return is_on == 1
 
 ##########################################################################################
 # control (on/off)
 ##########################################################################################
 
-def update_control_body(data, isOn, delayMin):
-	print("Setting did (device id): %s" % g_device_id)
+def update_control_body(data, is_on, time_min):
 	data[40:43] = binascii.unhexlify(g_device_id)
-	print("Setting uid (phone id): %s" % g_phone_id)
 	data[44:48] = binascii.unhexlify(g_phone_id)
-	print("Setting device_pass: %s" % g_device_pass)
 	data[48:52] = binascii.unhexlify(g_device_pass)
 
-	data[80:81] = pack(1, 1) # struct.pack('<b', 1) 
-	data[81:83] = pack(6, 1) # struct.pack('<h', 6) # TODO constant ? 
+	data[80:81] = pack(1, 1) 
+	data[81:83] = pack(6, 1) # TODO constant ? 
 	assert unpack(data[80:81]) == 1, "expected 1, got %d" % unpack(data[80:81])
 	assert unpack(data[81:83]) == 6, "expected 6, got %d" % unpack(data[81:83])
-	data[83:84] = pack(isOn, 1) # struct.pack('<b', isOn)
+	data[83:84] = pack(is_on, 1)
 	assert unpack(data[84:85]) == 0, "expected 0, got %d" % unpack(data[84:85])
-	data[85:89] = pack(delayMin * 60, 4) # struct.pack('<i', delayMin * 60)
+	data[85:89] = pack(time_min * 60, 4)
 
-def genereate_control_request(isOn, delayMin, session):
+def genereate_control_request(is_on, time_min, session):
 	length = 93
 	command = 513
 	data = bytearray(b'\x00') * (length - 4)
 	update_request_header(data, length, command, session)
 	assert get_command_from_header(data) == command, "This is not a control request, not continuouing!, command: %d" % get_command_from_header(data)
 
-	update_control_body(data, isOn, delayMin)
+	update_control_body(data, is_on, time_min)
 	data = calc_crc(data)
-	
-	print("Generated control request. length: %d packet: \n\t%s" % (len(data), binascii.hexlify(data)))
 	
 	return data
 
-def send_control(isOn, delayMin, session, socket, logFile = None):
-	request = genereate_control_request(isOn, delayMin, session)
-	print("Sending control request, isOn: %d, delay: %d, request: \n\t%s" % (isOn, delayMin, binascii.hexlify(request)))
-	if logFile:
-		logFile.write("Sending control request, turning: %s, delay min: %d\n\t%s\n" % (isOn, delayMin, binascii.hexlify(request)))
+def send_control(isOn, timeMin, session, socket):
+	request = genereate_control_request(isOn, timeMin, session)
 
-	session, response = send_packet_get_response(request, socket, logFile)
-	print("Got control response, session: %d" % session)
-	if logFile:
-		logFile.write("Got control response, turned: %s, delay min: %d" % (isOn, delayMin))
+	if g_debug:
+		print("Sending control request, isOn: %d, minutes: %d: \n\t%s" % (isOn, timeMin, binascii.hexlify(request)))
+	else:
+		print("Sending control request, isOn: %d, minutes: %d" % (isOn, timeMin))
+	
+	session, response = send_packet_get_response(request, socket)
+
+	if g_debug:
+		print("Got control response, action: %s, minutes: %d, session: %d, response: \n\t%s\n" % (isOn, timeMin, session, binascii.hexlify(response)))
+	else:
+		print("Got control response")
 
 ##########################################################################################
 # crc
@@ -244,7 +240,8 @@ def parse_pcap_file(file_path):
 
 		command = get_command_from_header(packet)
 		if command != 513:
-			#print("Not control command, continuouing to next packet, command: %d" % command)
+			if g_debug:
+				print("Not control command, continuouing to next packet, command: %d" % command)
 			continue
 
 		device_id = binascii.hexlify(packet[40:43])
@@ -253,7 +250,7 @@ def parse_pcap_file(file_path):
 
 		return device_id, phone_id, device_pass
 
-	print("Didn't find ids in pcap file")
+	print("ERROR: Didn't find ids in pcap file")
 	sys.exit()
 
 ##########################################################################################
@@ -272,47 +269,82 @@ def recv_response(socket):
 	responseBody = socket.recv(lengthLeft)
 	return respSession, bytearray(responseHeader) + bytearray(responseBody)
 
-def send_packet_get_response(request, socket, logFile = None):
+def send_packet_get_response(request, socket):
 	socket.send(request)
 	session, response = recv_response(socket)
 	assert session != 0, "Got session 0 in response"
 	return session, response
 
 def open_socket():
-	print ("Openning socket")
+	print ("Connecting...")
 	clientsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	clientsocket.connect((g_switcher_ip, g_port))
-	print("Socket connected to %s:%d" % (g_switcher_ip, g_port))
+	if g_debug:
+		print("Socket connected to %s:%d" % (g_switcher_ip, g_port))
+	else:
+		print("Connected")
 
 	return clientsocket
 
-def get_state():
-	socket = open_socket()
-	session = send_local_sign_in(socket)
-	isOn = send_phone_state(session, socket)
-	return 1 if isOn else 0
+def read_credentials():
+	data = json.load(open(g_credentials_filename))
+	global g_switcher_ip
+	global g_device_id
+	global g_phone_id
+	global g_device_pass
 
-def control(on, timeMin):
+	g_switcher_ip = data["ip"]
+	g_phone_id = data["phone_id"]
+	g_device_id = data["device_id"] 
+	g_device_pass = data["device_pass"]
+
+	if g_switcher_ip == "1.1.1.1":
+		print("ERROR: Please update Switcher IP address in %s" % g_credentials_filename)
+		sys.exit()
+
+def write_credentials(device_id, phone_id, device_pass):
+	data = {}
+	data["ip"] = "1.1.1.1"
+	data["phone_id"] = phone_id
+	data["device_id"] = device_id
+	data["device_pass"] = device_pass
+	with open(g_credentials_filename, 'w') as outfile:
+ 		json.dump(data, outfile)
+
+def get_state():
+	read_credentials()
 	socket = open_socket()
 	session = send_local_sign_in(socket)
-	isOn = send_phone_state(session, socket)
-	onSign = 1 if on else 0
-	send_control(onSign , timeMin, session, socket)
+	is_on = send_phone_state(session, socket)
+	print("Device is: %s" % ("on" if is_on else "off"))
+	return 1 if is_on else 0
+
+def control(on, time_min):
+	read_credentials()
+	socket = open_socket()
+	session = send_local_sign_in(socket)
+	send_phone_state(session, socket)
+	send_control(on , time_min, session, socket)
 
 def parse(file_path):
 	device_id, phone_id, device_pass = parse_pcap_file(file_path)
 	print("Device ID (did): %s" % device_id)
 	print("Phone ID (uid): %s" % phone_id)
 	print("Device pass: %s" % device_pass)
+	write_credentials(device_id, phone_id, device_pass)
+	print("Wrote credential files successfully. please update Switcher IP address (%s)" % g_credentials_filename)
 
 def parse_args():
 	parser = argparse.ArgumentParser(description='Help me')
 	modeChoices = ["on", "off", "get_state", "parse_pcap_file"]
 	parser.add_argument('-m','--mode', dest='mode', choices=modeChoices, required=True)
-	parser.add_argument('-t','--time', dest='timeMin', default=0, type=int, required=False)
+	parser.add_argument('-t','--time', dest='time_min', default=0, type=int, required=False)
 	parser.add_argument('-f','--file_path', dest='file', help="Pcap file to parse (requires pypcapfile package)", required=False)
+	parser.add_argument('-d','--debug', dest='debug', default=False, action='store_true', required=False)
 
 	args = vars(parser.parse_args())
+	global g_debug
+	g_debug = args['debug']
 	mode = args['mode']
 
 	if mode == 'parse_pcap_file':
@@ -328,6 +360,10 @@ if mode == 'get_state':
 elif mode == 'parse_pcap_file':
 	parse(args['file'])
 elif mode == 'on' or mode == 'off':
-	control(mode == 'on', args['timeMin'])
+	if not os.path.isfile(g_credentials_filename):
+		print("ERROR: Missing credentials file (%s), run script in parse mode to generate from pcap file" % g_credentials_filename)
+		sys.exit()
+	control(mode == 'on', args['time_min'])
 else:
-	assert False, "Unexpected mode"
+	print("ERROR: unexpected mode")
+	sys.exit()
