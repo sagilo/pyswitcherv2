@@ -215,7 +215,7 @@ def send_control(isOn, timeMin, session, socket):
 def calc_crc(data, key = "00000000000000000000000000000000"): 
 	crc = bytearray(struct.pack('>I', binascii.crc_hqx(data, 4129)))
 	data = data + crc[3:4] + crc[2:3]
-	crc = crc[3:4] + crc[2:3] + bytearray(key)
+	crc = crc[3:4] + crc[2:3] + bytearray(key, 'utf8')
 	crc = bytearray(struct.pack('>I', binascii.crc_hqx(crc, 4129)))
 	data = data + crc[3:4] + crc[2:3]
 	return bytearray(data)
@@ -244,10 +244,10 @@ def parse_pcap_file(file_path):
 				print("Not control command, continuouing to next packet, command: %d" % command)
 			continue
 
-		device_id = binascii.hexlify(packet[40:43])
-		phone_id = binascii.hexlify(packet[44:46])
-		device_pass = binascii.hexlify(packet[48:52])
-
+		device_id = binascii.hexlify(packet[40:43]).decode("utf-8") 
+		phone_id = binascii.hexlify(packet[44:46]).decode("utf-8") 
+		device_pass = binascii.hexlify(packet[48:52]).decode("utf-8")
+		
 		return device_id, phone_id, device_pass
 
 	print("ERROR: Didn't find ids in pcap file")
@@ -308,6 +308,7 @@ def write_credentials(device_id, phone_id, device_pass):
 	data["phone_id"] = phone_id
 	data["device_id"] = device_id
 	data["device_pass"] = device_pass
+
 	with open(g_credentials_filename, 'w') as outfile:
  		json.dump(data, outfile)
 
