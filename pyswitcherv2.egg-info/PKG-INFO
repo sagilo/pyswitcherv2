@@ -1,0 +1,12 @@
+Metadata-Version: 1.1
+Name: pyswitcherv2
+Version: 1.2.4
+Summary: Control Switcher V2 water heater via Python
+Home-page: https://github.com/sagilo/pyswitcherv2
+Author: Sagi Lowenhardt
+Author-email: sagilo@gmail.com
+License: UNKNOWN
+Download-URL: https://github.com/sagilo/pyswitcherv2/archive/1.2.4.tar.gz
+Description: UNKNOWN
+Keywords: switcher,switcherv2
+Platform: UNKNOWN

@@ -1,0 +1,11 @@
+MANIFEST.in
+README
+setup.cfg
+setup.py
+pyswitcherv2/__init__.py
+pyswitcherv2/credentials.json
+pyswitcherv2/switcher.py
+pyswitcherv2.egg-info/PKG-INFO
+pyswitcherv2.egg-info/SOURCES.txt
+pyswitcherv2.egg-info/dependency_links.txt
+pyswitcherv2.egg-info/top_level.txt
