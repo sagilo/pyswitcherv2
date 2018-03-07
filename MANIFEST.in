@@ -1,0 +1,7 @@
+include README
+include setup.cfg
+include setup.py
+include pyswitcherv2/__init__.py
+include pyswitcherv2/credentials.json
+include pyswitcherv2/switcher.py
+
