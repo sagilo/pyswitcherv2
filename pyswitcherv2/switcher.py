@@ -7,6 +7,9 @@ import sys
 import json
 import os.path
 
+knownFirmwareVersionToWorkWith = "65.7"
+knownAppVersionToWorkWith = "1.3"
+
 g_credentials_filename = "credentials.json"
 g_port = 9957
 g_header_size_bytes = 40
@@ -251,7 +254,7 @@ def parse_pcap_file(file_path):
         return device_id, phone_id, device_pass
 
     print("ERROR: Didn't find ids in pcap file")
-    sys.exit()
+    sys.exit(-1)
 
 ##########################################################################################
 # socket helpers
@@ -264,7 +267,9 @@ def get_data_from_response_header(header):
 
 def recv_response(socket):
     responseHeader = bytearray(socket.recv(g_header_size_bytes))
-    assert len(responseHeader) >= g_header_size_bytes, "Respone header can't be smaller than %d bytes, got %d bytes, exiting" % (g_header_size_bytes, len(responseHeader))
+    if len(responseHeader) < g_header_size_bytes:
+        print("ERROR: error getting response")
+        sys.exit(-1)
     respSession, lengthLeft = get_data_from_response_header(responseHeader)
     responseBody = socket.recv(lengthLeft)
     return respSession, bytearray(responseHeader) + bytearray(responseBody)
@@ -300,7 +305,7 @@ def read_credentials():
 
     if g_switcher_ip == "1.1.1.1":
         print("ERROR: Please update Switcher IP address in %s" % g_credentials_filename)
-        sys.exit()
+        sys.exit(-1)
 
 def write_credentials(device_id, phone_id, device_pass):
     data = {}
@@ -318,7 +323,7 @@ def get_state():
     session = send_local_sign_in(socket)
     is_on = send_phone_state(session, socket)
     print("Device is: %s" % ("on" if is_on else "off"))
-    return 1 if is_on else 0
+    return 0 if is_on else 1
 
 def control(on, time_min):
     read_credentials()
@@ -363,8 +368,10 @@ elif mode == 'parse_pcap_file':
 elif mode == 'on' or mode == 'off':
     if not os.path.isfile(g_credentials_filename):
         print("ERROR: Missing credentials file (%s), run script in parse mode to generate from pcap file" % g_credentials_filename)
-        sys.exit()
+        sys.exit(-1)
     control(mode == 'on', args['time_min'])
 else:
     print("ERROR: unexpected mode")
-    sys.exit()
+    sys.exit(-1)
+
+sys.exit(0)
