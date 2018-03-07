@@ -9,6 +9,19 @@ Requirements
 The script was tested on Python 2.7 and up or Python 3.5.
 Feel free to inform if you find a non compatible version.
 
+
+Installation
+-----
+### Using pip
+
+    $ pip install pyswitcherv2
+
+### Downloading
+Find the latest package at [dist/](https://github.com/sagilo/pyswitcherv2/tree/master/dist) dir
+
+### Cloning
+Use the 'clone' button from the repository main page
+
 Usage
 -----
 ### Configuration
