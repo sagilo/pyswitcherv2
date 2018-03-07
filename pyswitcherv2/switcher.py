@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import socket
 import struct
 import time
@@ -14,6 +16,14 @@ g_credentials_filename = "credentials.json"
 g_port = 9957
 g_header_size_bytes = 40
 g_debug = False
+g_socket = None
+g_receive_size = 1024
+
+def exit(code):
+    if g_socket:
+        print("Closing socket...")
+        g_socket.close()
+    sys.exit(code)
 
 def unpack(bytes):
     size = len(bytes)
@@ -40,28 +50,6 @@ def pack(integral, size):
         assert False, "Unexpected size: %d" % size
     return struct.pack(fmt, integral)
 
-def validate_header(header):
-    length = len(header)
-    assert length >= g_header_size_bytes, "Header must be at least %d bytes, current: %d" % (g_header_size_bytes, length)
-    assert unpack(header[0:1]) == -2, "Expected -2 got %d" % unpack(header[0:1])
-    assert unpack(header[1:2]) == -16, "Expected -16 got %d" % unpack(header[1:2])
-    # 2:4 length
-    assert unpack(header[4:5]) == 2, "Expected 2 got %d" % unpack(header[4:5])
-    assert unpack(header[5:6]) == 50, "Expected 50 got %d" % unpack(header[5:6])
-    # 6:8 command
-    # 8:12 session
-    # 12:14 serial
-    # 14:15 dirt
-    assert unpack(header[15:16]) == 0, "Expected 0 got %d" % unpack(header[15:16]) # error field, should be 0 on request
-    assert unpack(header[16:18]) == 0, "Expected 0 got %d" % unpack(header[16:18])
-    # 18:24 mac
-    # 24:28 timestamp
-    assert unpack(header[28:32]) == 0, "Expected 0 got %d" % unpack(header[28:32])
-    assert unpack(header[32:36]) == 0, "Expected 0 got %d" % unpack(header[32:36])
-    assert unpack(header[36:38]) == 0, "Expected 0 got %d" % unpack(header[36:38])
-    assert unpack(header[38:39]) == -16, "Expected -16 got %d" % unpack(header[38:39])
-    assert unpack(header[39:40]) == -2, "Expected -2 got %d" % unpack(header[39:40])
-
 def update_request_constants(header):
     header[0:1] = pack(-2, 1)
     header[1:2] = pack(-16, 1)
@@ -75,14 +63,13 @@ def update_request_header(header, length, command, session):
     serial = 52
     dirty = 1
     timestamp = int(round(time.time()))
-    header[2:4] = pack(length, 2) # struct.pack('<H', length) 
-    header[6:8] = pack(command, 2) # struct.pack('<H', command)
-    header[8:12] = pack(session, 4) # struct.pack('<I', session)
-    header[12:14] = pack(serial, 2) # struct.pack('<H', serial)
-    header[14:15] = pack(dirty, 1) # struct.pack('<b', dirty)
+    header[2:4] = pack(length, 2) 
+    header[6:8] = pack(command, 2)
+    header[8:12] = pack(session, 4)
+    header[12:14] = pack(serial, 2)
+    header[14:15] = pack(dirty, 1)
     #print ("\tMAC: %s" % binascii.hexlify(header[18:24]))
-    header[24:28] = pack(timestamp, 4) # struct.pack('<I', int(round(time.time())))
-    validate_header(header)
+    header[24:28] = pack(timestamp, 4)
 
 def get_command_from_header(header):
     return struct.unpack('<H', header[6:8])[0]
@@ -91,33 +78,32 @@ def get_command_from_header(header):
 # local sign in 
 ##########################################################################################
 
+LOCAL_SIGN_IN_COMMAND = 161
+LOCAL_SIGN_IN_LENGTH = 82
+
 def update_local_sign_in_body(data):
     data[40:42] = binascii.unhexlify("1c00")
     data[42:46] = binascii.unhexlify(g_phone_id)
     data[46:50] = binascii.unhexlify(g_device_pass)
-    data[80:82] = pack(0, 2)
+    data[76:78] = pack(0, 2)
 
 def generate_local_sign_in_request():
-    length = 82
-    command = 161
-    data = bytearray(b'\x00') * (length - 4)
+    data = bytearray(LOCAL_SIGN_IN_LENGTH - 4)
     session = 0
-    update_request_header(data, length, command, session)
-    assert get_command_from_header(data) == command, "This is not a local sign in request, not continuouing!, command: %d" % get_command_from_header(data)
+    update_request_header(data, LOCAL_SIGN_IN_LENGTH, LOCAL_SIGN_IN_COMMAND, session)
+    assert get_command_from_header(data) == LOCAL_SIGN_IN_COMMAND, "This is not a local sign in request, not continuouing!, command: %d" % get_command_from_header(data)
     update_local_sign_in_body(data)
-    data = calc_crc(data)
-        
-    return data
+    return calc_crc(data)
 
-def send_local_sign_in(socket):
+def send_local_sign_in():
     request = generate_local_sign_in_request()
-    
+
     if g_debug:
         print("Sending local sign in request: \n\t%s" % binascii.hexlify(request))
     else:
         print("Sending local sign in request")
 
-    session, response = send_packet_get_response(request, socket)
+    session, response = send_request_get_response(request)
 
     if g_debug:
         print("Got local sign in response, session: %d, response: \n\t%s\n" % (session, binascii.hexlify(response)))
@@ -130,22 +116,24 @@ def send_local_sign_in(socket):
 # phone state
 ##########################################################################################
 
+PHONE_STATE_COMMAND = 769
+PHONE_STATE_REQ_LENGTH = 48
+
 def update_phone_state_body(data):
     data[40:43] = binascii.unhexlify(g_device_id)
+    data[43:44] = pack(0, 1)
 
 def generate_phone_state_request(session):
-    length = 48
-    command = 769
-    data = bytearray(b'\x00') * (length - 4)
-    update_request_header(data, length, command, session)
-    assert get_command_from_header(data) == command, "This is not a phone state request, not continuouing!, command: %d" % get_command_from_header(data)
+    data = bytearray(PHONE_STATE_REQ_LENGTH - 4)
+    update_request_header(data, PHONE_STATE_REQ_LENGTH, PHONE_STATE_COMMAND, session)
+    assert get_command_from_header(data) == PHONE_STATE_COMMAND, "This is not a phone state request, not continuouing!, command: %d" % get_command_from_header(data)
 
     update_phone_state_body(data)
     data = calc_crc(data)
         
     return data
 
-def send_phone_state(session, socket):
+def send_phone_state(session):
     request = generate_phone_state_request(session)
 
     if g_debug:
@@ -153,7 +141,7 @@ def send_phone_state(session, socket):
     else:
         print("Sending phone state request")
 
-    session, response = send_packet_get_response(request, socket)
+    session, response = send_request_get_response(request)
 
     is_on = unpack(response[75:77])
     minutes_to_off = unpack(response[89:93]) / 60
@@ -171,6 +159,9 @@ def send_phone_state(session, socket):
 # control (on/off)
 ##########################################################################################
 
+CONTROL_COMMAND = 513
+CONTROL_REQ_LENGTH = 93
+
 def update_control_body(data, is_on, time_min):
     data[40:43] = binascii.unhexlify(g_device_id)
     data[44:48] = binascii.unhexlify(g_phone_id)
@@ -185,18 +176,13 @@ def update_control_body(data, is_on, time_min):
     data[85:89] = pack(time_min * 60, 4)
 
 def genereate_control_request(is_on, time_min, session):
-    length = 93
-    command = 513
-    data = bytearray(b'\x00') * (length - 4)
-    update_request_header(data, length, command, session)
-    assert get_command_from_header(data) == command, "This is not a control request, not continuouing!, command: %d" % get_command_from_header(data)
-
+    data = bytearray(CONTROL_REQ_LENGTH - 4)
+    update_request_header(data, CONTROL_REQ_LENGTH, CONTROL_COMMAND, session)
+    assert get_command_from_header(data) == CONTROL_COMMAND, "This is not a control request, not continuouing!, command: %d" % get_command_from_header(data)
     update_control_body(data, is_on, time_min)
-    data = calc_crc(data)
+    return calc_crc(data)
     
-    return data
-
-def send_control(isOn, timeMin, session, socket):
+def send_control(isOn, timeMin, session):
     request = genereate_control_request(isOn, timeMin, session)
 
     if g_debug:
@@ -204,7 +190,7 @@ def send_control(isOn, timeMin, session, socket):
     else:
         print("Sending control request, isOn: %d, minutes: %d" % (isOn, timeMin))
     
-    session, response = send_packet_get_response(request, socket)
+    session, response = send_request_get_response(request)
 
     if g_debug:
         print("Got control response, action: %s, minutes: %d, session: %d, response: \n\t%s\n" % (isOn, timeMin, session, binascii.hexlify(response)))
@@ -227,11 +213,11 @@ def calc_crc(data, key = "00000000000000000000000000000000"):
 # parsing
 ##########################################################################################
 
-def parse_pcap_file(file_path):
+def parse_pcap_file(pcap_file):
     from pcapfile import savefile
 
     print("Loading and parsing pcap file:")
-    testcap = open(file_path, 'rb')
+    testcap = open(pcap_file, 'rb')
     capfile = savefile.load_savefile(testcap, layers=1, verbose=True)
     print("\n")
     for packet in capfile.packets:
@@ -254,45 +240,40 @@ def parse_pcap_file(file_path):
         return device_id, phone_id, device_pass
 
     print("ERROR: Didn't find ids in pcap file")
-    sys.exit(-1)
+    exit(-1)
 
 ##########################################################################################
 # socket helpers
 ##########################################################################################
 
-def get_data_from_response_header(header):
-    length = unpack(header[2:4])
-    session = unpack(header[8:12])
-    return session, (length - g_header_size_bytes)
+def recv_response():
+    response = bytearray(g_socket.recv(g_receive_size))
+    if len(response) < g_header_size_bytes:
+        print("ERROR: error getting response (server closed)")
+        exit(-1)
 
-def recv_response(socket):
-    responseHeader = bytearray(socket.recv(g_header_size_bytes))
-    if len(responseHeader) < g_header_size_bytes:
-        print("ERROR: error getting response")
-        sys.exit(-1)
-    respSession, lengthLeft = get_data_from_response_header(responseHeader)
-    responseBody = socket.recv(lengthLeft)
-    return respSession, bytearray(responseHeader) + bytearray(responseBody)
-
-def send_packet_get_response(request, socket):
-    socket.send(request)
-    session, response = recv_response(socket)
-    assert session != 0, "Got session 0 in response"
+    session = unpack(response[8:12])
     return session, response
 
+def send_request_get_response(request):
+    g_socket.send(request)
+    return recv_response()
+    
 def open_socket():
+    global g_socket
+    if g_socket:
+        g_socket.close()
+
     print ("Connecting...")
-    clientsocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    clientsocket.connect((g_switcher_ip, g_port))
+    g_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    g_socket.connect((g_switcher_ip, g_port))
     if g_debug:
         print("Socket connected to %s:%d" % (g_switcher_ip, g_port))
     else:
         print("Connected")
 
-    return clientsocket
-
-def read_credentials():
-    data = json.load(open(g_credentials_filename))
+def read_credentials(credentials_file):
+    data = json.load(open(credentials_file))
     global g_switcher_ip
     global g_device_id
     global g_phone_id
@@ -304,8 +285,8 @@ def read_credentials():
     g_device_pass = data["device_pass"]
 
     if g_switcher_ip == "1.1.1.1":
-        print("ERROR: Please update Switcher IP address in %s" % g_credentials_filename)
-        sys.exit(-1)
+        print("ERROR: Please update Switcher IP address in %s" % credentials_file)
+        exit(-1)
 
 def write_credentials(device_id, phone_id, device_pass):
     data = {}
@@ -317,22 +298,22 @@ def write_credentials(device_id, phone_id, device_pass):
     with open(g_credentials_filename, 'w') as outfile:
          json.dump(data, outfile)
 
-def get_state():
-    read_credentials()
-    socket = open_socket()
-    session = send_local_sign_in(socket)
-    is_on = send_phone_state(session, socket)
+def get_state(credentials_file):
+    read_credentials(credentials_file)
+    open_socket()
+    session = send_local_sign_in()
+    is_on = send_phone_state(session)
     print("Device is: %s" % ("on" if is_on else "off"))
     return 0 if is_on else 1
 
-def control(on, time_min):
-    read_credentials()
-    socket = open_socket()
-    session = send_local_sign_in(socket)
-    send_phone_state(session, socket)
-    send_control(on , time_min, session, socket)
+def control(on, time_min, credentials_file):
+    read_credentials(credentials_file)
+    open_socket()
+    session = send_local_sign_in()
+    send_phone_state(session)
+    send_control(on , time_min, session)
 
-def parse(file_path):
+def parse_pcap_file(file_path):
     device_id, phone_id, device_pass = parse_pcap_file(file_path)
     print("Device ID (did): %s" % device_id)
     print("Phone ID (uid): %s" % phone_id)
@@ -342,11 +323,12 @@ def parse(file_path):
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Help me')
-    modeChoices = ["on", "off", "get_state", "parse_pcap_file"]
-    parser.add_argument('-m','--mode', dest='mode', choices=modeChoices, required=True)
+    mode_choices = ["on", "off", "get_state", "parse_pcap_file"]
+    parser.add_argument('-m','--mode', dest='mode', choices=mode_choices, required=True)
     parser.add_argument('-t','--time', dest='time_min', default=0, type=int, required=False)
-    parser.add_argument('-f','--file_path', dest='file', help="Pcap file to parse (requires pypcapfile package)", required=False)
+    parser.add_argument('-f','--file_path', dest='pcap_file', help="Pcap file to parse (requires pypcapfile package)", required=False)
     parser.add_argument('-d','--debug', dest='debug', default=False, action='store_true', required=False)
+    parser.add_argument('-c','--credentials_file_path', default=g_credentials_filename, dest='credentials_file', help='Path to credentials file if not next to script', required=False)
 
     args = vars(parser.parse_args())
     global g_debug
@@ -356,22 +338,25 @@ def parse_args():
     if mode == 'parse_pcap_file':
         assert 'file' in args, "No file given for parsing"
 
+    if mode == 'get_state' or mode == 'on' or mode == 'off':
+        credentials_file = args['credentials_file']
+        if not os.path.isfile(credentials_file):
+            print("ERROR: Missing credentials file (%s), run script in parse mode to generate from pcap file" % credentials_file)
+            exit(-1)
+
     return args
 
 args = parse_args()
 mode = args['mode']
+rc = 0
 if mode == 'get_state':
-    rc = get_state()
-    sys.exit(rc)
+    rc = get_state(args['credentials_file'])
 elif mode == 'parse_pcap_file':
-    parse(args['file'])
+    parse_pcap_file(args['pcap_file'])
 elif mode == 'on' or mode == 'off':
-    if not os.path.isfile(g_credentials_filename):
-        print("ERROR: Missing credentials file (%s), run script in parse mode to generate from pcap file" % g_credentials_filename)
-        sys.exit(-1)
-    control(mode == 'on', args['time_min'])
+    control(mode == 'on', args['time_min'], args['credentials_file'])
 else:
     print("ERROR: unexpected mode")
-    sys.exit(-1)
+    exit(-1)
 
-sys.exit(0)
+exit(0)
