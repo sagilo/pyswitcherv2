@@ -213,7 +213,7 @@ def calc_crc(data, key = "00000000000000000000000000000000"):
 # parsing
 ##########################################################################################
 
-def parse_pcap_file(pcap_file):
+def extract_credentials_from_pcap(pcap_file):
     from pcapfile import savefile
 
     print("Loading and parsing pcap file:")
@@ -230,7 +230,7 @@ def parse_pcap_file(pcap_file):
         command = get_command_from_header(packet)
         if command != 513:
             if g_debug:
-                print("Not control command, continuouing to next packet, command: %d" % command)
+                print("Not control command, continuing to next packet, command: %d" % command)
             continue
 
         device_id = binascii.hexlify(packet[40:43]).decode("utf-8") 
@@ -314,12 +314,12 @@ def control(on, time_min, credentials_file):
     send_control(on , time_min, session)
 
 def parse_pcap_file(file_path):
-    device_id, phone_id, device_pass = parse_pcap_file(file_path)
+    device_id, phone_id, device_pass = extract_credentials_from_pcap(file_path)
     print("Device ID (did): %s" % device_id)
     print("Phone ID (uid): %s" % phone_id)
     print("Device pass: %s" % device_pass)
     write_credentials(device_id, phone_id, device_pass)
-    print("Wrote credential files successfully. please update Switcher IP address (%s)" % g_credentials_filename)
+    print("Wrote credential files successfully. Please update Switcher IP address (%s)" % g_credentials_filename)
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Help me')
@@ -336,7 +336,7 @@ def parse_args():
     mode = args['mode']
 
     if mode == 'parse_pcap_file':
-        assert 'file' in args, "No file given for parsing"
+        assert 'pcap_file' in args, "No file given for parsing"
 
     if mode == 'get_state' or mode == 'on' or mode == 'off':
         credentials_file = args['credentials_file']
