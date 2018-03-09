@@ -1,17 +1,17 @@
-![Alt text](https://github.com/sagilo/pyswitcherv2/blob/master/images/switcher.png?raw=true "Title")
+![Alt text](https://github.com/sagilo/pyswitcherv2/blob/master/images/switcher.png?raw=true "PySwitcherV2")
 
-PySwitcherV2
-==========
+# PySwitcherV2
 #### Control your Switcher V2 water heater using Python.
 
-Requirements
------
+## Getting Started
+These instructions will get you a copy of the project up and running on your local machine so you can control your Switcher water heater using Python on your local network.
+
+### Prerequisites
 The script was tested on Python 2.7 and up or Python 3.5.
 Feel free to inform if you find a non compatible version.
+You local machine and Switcher must be on the same network.
 
-
-Installation
------
+## Installing
 ### Using pip
 
     $ pip install pyswitcherv2
@@ -22,8 +22,7 @@ Find the latest package at [dist/](https://github.com/sagilo/pyswitcherv2/tree/m
 ### Cloning
 Use the 'clone' button from the repository main page
 
-Usage
------
+## Running
 ### Configuration
 The script requires 4 parameters:
 * Device ID
