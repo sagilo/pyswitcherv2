@@ -376,7 +376,7 @@ def run(args, try_num):
     	sleep_sec = 3 * try_num
         print("Retrying in %d seconds" % sleep_sec)
         time.sleep(sleep_sec)
-        return run(mode, args, try_num + 1)
+        return run(args, try_num + 1)
 
 args = parse_args()
 print("%s") % time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
