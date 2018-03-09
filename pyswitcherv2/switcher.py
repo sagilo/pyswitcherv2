@@ -18,10 +18,11 @@ g_header_size_bytes = 40
 g_debug = False
 g_socket = None
 g_receive_size = 1024
+g_num_of_retries = 3
 
 def exit_with_error(msg):
-	print(msg)
-	exit(-1)
+    print(msg)
+    exit(-1)
 
 def exit(code):
     if g_socket:
@@ -72,11 +73,11 @@ def update_request_header(header, length, command, session):
     header[8:12] = pack(session, 4)
     header[12:14] = pack(serial, 2)
     header[14:15] = pack(dirty, 1)
-    #print ("\tMAC: %s" % binascii.hexlify(header[18:24]))
+    #header[18:26] = 0 # 6 bytes did, not required
     header[24:28] = pack(timestamp, 4)
 
 def get_command_from_header(header):
-    return struct.unpack('<H', header[6:8])[0]
+    return unpack(header[6:8])
 
 ##########################################################################################
 # local sign in 
@@ -86,7 +87,7 @@ LOCAL_SIGN_IN_COMMAND = 161
 LOCAL_SIGN_IN_LENGTH = 82
 
 def update_local_sign_in_body(data):
-    data[40:42] = binascii.unhexlify("1c00")
+    data[40:42] = binascii.unhexlify("1c00") # version
     data[42:46] = binascii.unhexlify(g_phone_id)
     data[46:50] = binascii.unhexlify(g_device_pass)
     data[76:78] = pack(0, 2)
@@ -252,8 +253,12 @@ def extract_credentials_from_pcap(pcap_file):
 def recv_response():
     response = bytearray(g_socket.recv(g_receive_size))
     if len(response) < g_header_size_bytes:
-        exit_with_error("ERROR: error getting response (server closed)")
+        print("ERROR: error getting response (server closed)")
+        raise Exception("ERROR: error getting response (server closed)")
 
+    length = unpack(response[2:4])
+    if g_debug:
+        print("Response length (by response header): %d" % length)
     session = unpack(response[8:12])
     return session, response
 
@@ -337,11 +342,11 @@ def parse_args():
     mode = args.mode
 
     if mode == 'parse_pcap_file':
-    	pcap_file = args.pcap_file
-    	if pcap_file == None:
-    		exit_with_error("No file given for parsing (-f)")
-    	elif not os.path.isfile(pcap_file):
-    		exit_with_error("Can't find pcap file: '%s'" % pcap_file)
+        pcap_file = args.pcap_file
+        if pcap_file == None:
+            exit_with_error("No file given for parsing (-f)")
+        elif not os.path.isfile(pcap_file):
+            exit_with_error("Can't find pcap file: '%s'" % pcap_file)
 
     if mode == 'get_state' or mode == 'on' or mode == 'off':
         credentials_file = args.credentials_file
@@ -350,17 +355,29 @@ def parse_args():
 
     return args
 
-args = parse_args()
-mode = args.mode
-rc = 0
-print("%s") % time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
-if mode == 'get_state':
-    rc = get_state(args.credentials_file)
-elif mode == 'parse_pcap_file':
-    parse_pcap_file(args.pcap_file)
-elif mode == 'on' or mode == 'off':
-    control(mode == 'on', args.time_min, args.credentials_file)
-else:
-    exit_with_error("ERROR: unexpected mode")
+def run(args, try_num):
+    if try_num >= g_num_of_retries:
+        exit_with_error("ERROR: Reached max num of retries (%d), exiting..." % g_num_of_retries)
 
-exit(0)
+    try:
+    	mode = args.mode
+        if mode == 'get_state': 
+            return get_state(args.credentials_file)
+        
+        if mode == 'parse_pcap_file':
+            parse_pcap_file(args.pcap_file)
+        elif mode == 'on' or mode == 'off':
+            control(mode == 'on', args.time_min, args.credentials_file)
+        else:
+            exit_with_error("ERROR: unexpected mode")
+
+        return 0
+    except Exception:
+    	sleep_sec = 3 * try_num
+        print("Retrying in %d seconds" % sleep_sec)
+        time.sleep(sleep_sec)
+        return run(args, try_num + 1)
+
+args = parse_args()
+print("%s") % time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+exit(run(args, 1))
