@@ -19,6 +19,10 @@ g_debug = False
 g_socket = None
 g_receive_size = 1024
 
+def exit_with_error(msg):
+	print(msg)
+	exit(-1)
+
 def exit(code):
     if g_socket:
         print("Closing socket...")
@@ -151,7 +155,7 @@ def send_phone_state(session):
         #print("Device name: %s" % response[40:64])
         print("Got phone state response, session: %d, on: %d, minutes to off: %d, minutes on: %d, response: \n\t%s\n" % (session, is_on, minutes_to_off, minutes_on, binascii.hexlify(response)))
     else:
-        print("Got control response")
+        print("Got phone state response")
 
     return is_on == 1
 
@@ -239,8 +243,7 @@ def extract_credentials_from_pcap(pcap_file):
         
         return device_id, phone_id, device_pass
 
-    print("ERROR: Didn't find ids in pcap file")
-    exit(-1)
+    exit_with_error("ERROR: Didn't find ids in pcap file")
 
 ##########################################################################################
 # socket helpers
@@ -249,8 +252,7 @@ def extract_credentials_from_pcap(pcap_file):
 def recv_response():
     response = bytearray(g_socket.recv(g_receive_size))
     if len(response) < g_header_size_bytes:
-        print("ERROR: error getting response (server closed)")
-        exit(-1)
+        exit_with_error("ERROR: error getting response (server closed)")
 
     session = unpack(response[8:12])
     return session, response
@@ -285,8 +287,7 @@ def read_credentials(credentials_file):
     g_device_pass = data["device_pass"]
 
     if g_switcher_ip == "1.1.1.1":
-        print("ERROR: Please update Switcher IP address in %s" % credentials_file)
-        exit(-1)
+        exit_with_error("ERROR: Please update Switcher IP address in %s" % credentials_file)
 
 def write_credentials(device_id, phone_id, device_pass):
     data = {}
@@ -330,33 +331,36 @@ def parse_args():
     parser.add_argument('-d','--debug', dest='debug', default=False, action='store_true', required=False)
     parser.add_argument('-c','--credentials_file_path', default=g_credentials_filename, dest='credentials_file', help='Path to credentials file if not next to script', required=False)
 
-    args = vars(parser.parse_args())
+    args = parser.parse_args()
     global g_debug
-    g_debug = args['debug']
-    mode = args['mode']
+    g_debug = args.debug
+    mode = args.mode
 
     if mode == 'parse_pcap_file':
-        assert 'pcap_file' in args, "No file given for parsing"
+    	pcap_file = args.pcap_file
+    	if pcap_file == None:
+    		exit_with_error("No file given for parsing (-f)")
+    	elif not os.path.isfile(pcap_file):
+    		exit_with_error("Can't find pcap file: '%s'" % pcap_file)
 
     if mode == 'get_state' or mode == 'on' or mode == 'off':
-        credentials_file = args['credentials_file']
+        credentials_file = args.credentials_file
         if not os.path.isfile(credentials_file):
-            print("ERROR: Missing credentials file (%s), run script in parse mode to generate from pcap file" % credentials_file)
-            exit(-1)
+            exit_with_error("ERROR: Missing credentials file (%s), run script in parse mode to generate from pcap file" % credentials_file)
 
     return args
 
 args = parse_args()
-mode = args['mode']
+mode = args.mode
 rc = 0
+print("%s") % time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
 if mode == 'get_state':
-    rc = get_state(args['credentials_file'])
+    rc = get_state(args.credentials_file)
 elif mode == 'parse_pcap_file':
-    parse_pcap_file(args['pcap_file'])
+    parse_pcap_file(args.pcap_file)
 elif mode == 'on' or mode == 'off':
-    control(mode == 'on', args['time_min'], args['credentials_file'])
+    control(mode == 'on', args.time_min, args.credentials_file)
 else:
-    print("ERROR: unexpected mode")
-    exit(-1)
+    exit_with_error("ERROR: unexpected mode")
 
 exit(0)
