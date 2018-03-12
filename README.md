@@ -17,7 +17,7 @@ You local machine and Switcher must be on the same network.
     $ pip install pyswitcherv2
 
 ### Downloading
-Find the latest package at [dist/](https://github.com/sagilo/pyswitcherv2/tree/master/dist) dir
+Find the latest release at [releases/](https://github.com/sagilo/pyswitcherv2/releases) page
 
 ### Cloning
 Use the 'clone' button from the repository main page
