@@ -378,6 +378,10 @@ def run(args, try_num):
         time.sleep(sleep_sec)
         return run(args, try_num + 1)
 
-args = parse_args()
-print("%s") % time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
-exit(run(args, 1))
+def main():
+    args = parse_args()
+    print("%s") % time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+    exit(run(args, 1))
+
+if __name__ == '__main__': 
+    main()
