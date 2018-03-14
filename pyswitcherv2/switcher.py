@@ -227,7 +227,10 @@ def calc_crc(data, key = "00000000000000000000000000000000"):
 ##########################################################################################
 
 def extract_credentials_from_pcap(pcap_file):
-    from pcapfile import savefile
+    try:
+        from pcapfile import savefile
+    except ImportError, e:
+        exit_with_error("Missing 'pypcapfile' package, please install (pip install pypcapfile)")
 
     if g_debug:
         print("Loading and parsing pcap file: %s" % pcap_file)
