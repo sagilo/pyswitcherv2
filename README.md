@@ -1,4 +1,4 @@
-![Alt text](https://github.com/sagilo/pyswitcherv2/blob/master/images/switcher.png?raw=true "PySwitcherV2")
+![Alt text](https://github.com/sagilo/pyswitcherv2/blob/master/.github/images/switcher.png?raw=true "PySwitcherV2")
 
 # PySwitcherV2
 #### Control your Switcher V2 water heater using Python.
