@@ -229,7 +229,7 @@ def calc_crc(data, key = "00000000000000000000000000000000"):
 def extract_credentials_from_pcap(pcap_file):
     try:
         from pcapfile import savefile
-    except ImportError, e:
+    except ImportError as e:
         exit_with_error("Missing 'pypcapfile' package, please install (pip install pypcapfile)")
 
     if g_debug:
@@ -471,9 +471,12 @@ def run(args, try_num):
         time.sleep(sleep_sec)
         return run(args, try_num + 1)
 
+def get_timestamp():
+    return time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
+
 def main():
     args = parse_args()
-    print("%s | mode: %s ") % (time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()), args.mode)
+    print("%s | mode: %s" % (get_timestamp(), args.mode))
     exit(run(args, 1))
 
 if __name__ == '__main__': 
