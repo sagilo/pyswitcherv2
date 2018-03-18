@@ -76,3 +76,24 @@ Debug flag can be used with any other mode
 
     $ python switcher.py -m off -d
     $ python switcher.py -m get_state -d
+
+#### Using as objects
+As of version 1.2.9, if you installed via PyPi (pip install..) you should be able to control Switcher as an object within your scripts
+Here is an example use:
+```
+phone_id = "xxxx"
+dev_id = "xxxxxx"
+dev_pass = "xxxxxxxx"
+switcher_local_ip = "192.168.x.x"
+
+credentials = switcher.Credentials(phone_id, dev_id, dev_pass, switcher_local_ip)
+credentials.validate()
+is_debug = True
+switcher = switcher.Switcher(credentials, is_debug)
+time_minutes = 30
+switcher.turn_on(time_minutes)
+time.sleep(3)
+switcher.get_state()
+time.sleep(3)
+switcher.turn_off()
+```
