@@ -81,6 +81,9 @@ Debug flag can be used with any other mode
 As of version 1.2.9, if you installed via PyPi (pip install..) you should be able to control Switcher as an object within your scripts
 Here is an example use:
 ```
+import time
+from pyswitcherv2 import switcher
+
 phone_id = "xxxx"
 dev_id = "xxxxxx"
 dev_pass = "xxxxxxxx"
