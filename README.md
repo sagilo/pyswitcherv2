@@ -46,7 +46,7 @@ Then:
 This will create `credentials.json` file with most of the required information.  
 You will still need to update the file with Switcher local IP address (LAN)
 
-If you need assistance in creating pcap file, use the [Wiki page tutorial](https://github.com/sagilo/pyswitcherv2/wiki/Capturing-pcap-file-using-Android-device)
+If you need assistance in creating pcap file or finding Switcher local ip address, use the [Wiki page tutorial](https://github.com/sagilo/pyswitcherv2/wiki/Capturing-pcap-file-using-Android-device)
 
 ### Actions
 ##### Turn Switcher on/off:
