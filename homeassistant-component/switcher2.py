@@ -27,7 +27,6 @@ import voluptuous as vol
 from homeassistant.components.switch import (PLATFORM_SCHEMA, SwitchDevice)
 from homeassistant.const import (CONF_FRIENDLY_NAME)
 import homeassistant.helpers.config_validation as cv
-from pyswitcherv2 import switcher as switcherv2
 
 REQUIREMENTS = ['pyswitcherv2==1.2.9']
 
@@ -47,6 +46,8 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Required(DEVICE_PASSWORD): cv.string
 })
 def setup_platform(hass, config, add_devices, discovery_info=None):
+    from pyswitcherv2 import switcher as switcherv2
+
     local_ip_addr = config.get(LOCAL_IP_ADDR)
     phone_id = config.get(PHONE_ID)
     device_id = config.get(DEVICE_ID)
