@@ -509,7 +509,7 @@ def parse_args():
 
     if mode == 'get_state' or mode == 'on' or mode == 'off':
         if not os.path.isfile(args.credentials_file):
-            exit_with_error("Missing credentials file (%s), run script in 'parse pcap file' or 'set credentials' mode to generate file" % credentials_file)
+            exit_with_error("Missing credentials file (%s), run script in 'parse pcap file' or 'set credentials' mode to generate file" % args.credentials_file)
 
     return args
 
