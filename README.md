@@ -78,7 +78,7 @@ Debug flag can be used with any other mode
     $ python switcher.py -m get_state -d
 
 #### Using as objects
-As of version 1.2.9, if you installed via PyPi (pip install..) you should be able to control Switcher as an object within your scripts
+As of version 1.2.9, if you installed via PyPi (pip install..) you should be able to control Switcher as an object within your scripts  
 Here is an example use:
 ```
 import time
