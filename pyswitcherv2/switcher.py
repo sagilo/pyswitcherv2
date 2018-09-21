@@ -388,7 +388,7 @@ def extract_credentials_from_pcap(pcap_file, is_debug):
         capfile = savefile.load_savefile(file, layers=1, verbose=True)
         print("\n")
         for packet in capfile.packets:
-            packet = bytearray(binascii.unhexlify(packet.packet.payload))
+            packet = bytearray(packet.packet.payload)
             if (len(packet) <= 40): # tcp header
                 continue
 
