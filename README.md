@@ -100,3 +100,6 @@ switcher.get_state()
 time.sleep(3)
 switcher.turn_off()
 ```
+
+### Wiki
+The [Wiki section](https://github.com/sagilo/pyswitcherv2/wiki) contains more information about using the library with HomeAssistant and Homebridge.
